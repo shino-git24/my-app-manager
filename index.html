@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font-family: sans-serif; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #ccc padding: 8px; text-align: left; }
+      th { background-color: #f2f2f2; }
+      #loading { font-weight: bold; color: #555; }
+      th:nth-child(3), td:nth-child(3) {
+        text-align: center;
+      }
+
+      .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        bordr-radius: 16px;
+        font-size: 0.9em;
+        font-weight: bold;
+        color: white;
+        white-space: nowrap;
+      }
+
+      .status-開発中 { background-color: #ffc107; color: #333}
+      .status-よく使う { background-color: #0d6efd; }      
+      .status-時々使う { background-color: #198754; }    
+      .status-あんまり { background-color: purple; }
+      .status-停止 { background-color: #6c757d; }
+
+    </style>
+  </head>
+  <body>
+    <h1>自作アプリ管理ツール</h1>
+    
+    <table id="app-table">
+      <thead>
+        <tr>
+          <th>アプリ名</th>
+          <th>概要</th>
+          <th>ステータス</th>
+          <th>次にやること</th>
+        </tr>
+      </thead>
+      <tbody id="app-table-body">
+      </tbody>
+    </table>
+
+    <p id="loading">データを読み込み中...</p>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function(){
+        google.script.run
+          .withSuccessHandler(displayApps)
+          .withFailureHandler(displayError)
+          .getAppsData();  
+      });
+
+      function displayApps(apps) {
+        const tableBody = document.getElementById('app-table-body');
+        const loading = document.getElementById('loading');
+        tableBody.innerHTML = '';
+        loading.style.display = 'none';
+
+        if (!apps || apps.length === 0){
+          tableBody.innerHTML = '<tr><td colspan="4">表示するデータがありません。</td></tr>';
+          return;
+        }
+        apps.forEach(app => {
+          const row = document.createElement('tr');
+          const status = app.status || '';
+          row.innerHTML = `
+            <td>${app.name || ''}</td>
+            <td>${app.overview || ''}</td>
+            <td><span class="status-badge status-${status}">${status}</span></td>
+            <td>${app.next_action || ''}</td>
+            `;
+          tableBody.appendChild(row);
+        });
+      }
+
+      function displayError(error){
+        const loading = document.getElementById('loading');
+        loading.innerHTML = 'エラーが発生しました：'+ error.message;
+        loading.style.color = 'red';
+      }
+    </script>
+  </body>
+</html>
+
+
