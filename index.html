@@ -94,14 +94,29 @@
     .form-actions { text-align: right; margin-top: 25px; padding-top: 15px; border-top: 1px solid var(--border-color); }
     .form-actions .btn { margin-left: 10px; }
 
-    /* --- Detail View --- */
-    .detail-card { background: var(--white); border: 1px solid var(--border-color); border-radius: 8px; padding: 25px; }
-    .detail-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color); }
-    .detail-title { font-size: 1.8em; margin: 0; }
-    .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
-    .detail-item { display: flex; flex-direction: column; }
-    .detail-item-label { font-weight: bold; color: #555; margin-bottom: 5px; }
-    .detail-item-value { word-wrap: break-word; white-space: pre-wrap; }
+    /* --- Detail View (Inside Modal) --- */
+    .detail-grid { 
+        display: grid; 
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+        gap: 15px; 
+    }
+    .detail-item {
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    .detail-item-label {
+        font-weight: bold;
+        background-color: #e9ecef;
+        padding: 8px 12px;
+        color: #333;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .detail-item-value {
+        padding: 10px 12px;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+    }
     .detail-item-value a { color: var(--primary-color); }
 
     /* --- Other --- */
@@ -113,7 +128,6 @@
 </head>
 <body>
 
-  <!-- List View -->
   <div id="list-view" class="view active">
     <h1><i class="fa-solid fa-list-check"></i> 自作アプリ管理ツール</h1>
     <div class="controls">
@@ -134,23 +148,9 @@
     </div>
   </div>
 
-  <!-- Detail View -->
-  <div id="detail-view" class="view">
-    <div class="detail-header">
-        <h2 id="detail-title" class="detail-title"></h2>
-        <div>
-            <button id="detail-back-btn" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> 一覧へ戻る</button>
-            <button id="detail-edit-btn" class="btn btn-main"><i class="fa-solid fa-pencil"></i> 編集</button>
-            <button id="detail-delete-btn" class="btn btn-danger"><i class="fa-solid fa-trash"></i> 削除</button>
-        </div>
-    </div>
-    <div id="detail-content" class="detail-card"></div>
-  </div>
-
   <div id="loading"><i class="fa-solid fa-spinner fa-spin"></i> データを読み込み中...</div>
   <div id="error" style="display: none;"></div>
 
-  <!-- Add/Edit Modal -->
   <div id="modal" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">
@@ -160,14 +160,25 @@
       <form id="modal-form">
         <input type="hidden" id="form-id">
         <div class="form-grid">
-          <!-- Form fields will be dynamically generated -->
-        </div>
+          </div>
         <div class="form-actions">
           <button type="submit" id="save-btn" class="btn btn-main"><i class="fa-solid fa-save"></i> 保存する</button>
         </div>
       </form>
     </div>
   </div>
+  
+  <div id="detail-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 800px;">
+      <div class="modal-header">
+        <h2 id="detail-modal-title"></h2>
+        <button id="close-detail-modal-btn" class="close-btn">&times;</button>
+      </div>
+      <div id="detail-modal-body">
+        </div>
+    </div>
+  </div>
+
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -201,7 +212,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- DOM要素取得 ---
   const listView = document.getElementById('list-view');
-  const detailView = document.getElementById('detail-view');
   const tableHead = document.querySelector('#app-table thead');
   const tableBody = document.querySelector('#app-table tbody');
   const loadingEl = document.getElementById('loading');
@@ -211,6 +221,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalForm = document.getElementById('modal-form');
   const modalTitle = document.getElementById('modal-title');
   const columnSelectorDropdown = document.getElementById('column-selector-dropdown');
+  const detailModal = document.getElementById('detail-modal');
+  const detailModalTitle = document.getElementById('detail-modal-title');
+  const detailModalBody = document.getElementById('detail-modal-body');
 
   // --- 初期化 ---
   init();
@@ -226,11 +239,18 @@ document.addEventListener('DOMContentLoaded', () => {
   function setupEventListeners() {
     searchInput.addEventListener('input', handleSearch);
     document.getElementById('add-btn').addEventListener('click', showAddModal);
+    
+    // Edit Modal listeners
     document.getElementById('close-modal-btn').addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
     modalForm.addEventListener('submit', handleFormSubmit);
+    
+    // Column Selector listener
     document.getElementById('column-select-btn').addEventListener('click', toggleColumnSelector);
-    document.getElementById('detail-back-btn').addEventListener('click', showListView);
+    
+    //　NEW: Detail Modal listeners
+    document.getElementById('close-detail-modal-btn').addEventListener('click', closeDetailModal);
+    detailModal.addEventListener('click', (e) => { if (e.target === detailModal) closeDetailModal(); });
   }
 
   // --- データ取得 ---
@@ -243,72 +263,24 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function onFetchSuccess(response) {
-
-    console.log('[フロント] onFetchSuccess が呼ばれました。');
-    console.log('[フロント] サーバーからの応答 status:', response.status);
-    console.log('[フロント] 受け取った生データ(data):', response.data);
-    console.log('[フロント] 受け取ったデータ件数:', response.data ? response.data.length : 0);
-
-    hideLoading(); // ① 「読み込み中」を非表示にする
-
+    hideLoading();
     if (response.status === 'success') {
       allRecords = response.data.map(d => ({
         ...d,
         created_at: d.created_at ? new Date(d.created_at) : null,
         updated_at: d.updated_at ? new Date(d.updated_at) : null
-      })); 
-     applyFiltersAndSort();
+      }));
+      applyFiltersAndSort();
     } else {
       showError(response.message);
     }
-    
-    // ② 隠していたリスト表示を元に戻す
-    listView.style.display = 'block'; 
+    listView.style.display = 'block';
   }
 
   function onFetchFailure(error) {
-
-    console.log('[フロント] onFetchFailure が呼ばれました。エラー内容:', error);
-
     hideLoading();
     showError(error.message);
-  }
-
-  // --- ビュー切り替え ---
-  function showListView() {
-    detailView.classList.remove('active');
-    listView.classList.add('active');
-  }
-
-  function showDetailView(id) {
-    const record = allRecords.find(r => r.id === id);
-    if (!record) return;
-
-    document.getElementById('detail-title').textContent = record.name;
-    const detailContent = document.getElementById('detail-content');
-    detailContent.innerHTML = '';
-
-    const detailGrid = document.createElement('div');
-    detailGrid.className = 'detail-grid';
-
-    ALL_HEADERS.forEach(header => {
-        if (header.type === 'readonly' && !record[header.key]) return;
-
-        const item = document.createElement('div');
-        item.className = 'detail-item';
-        item.innerHTML = `
-            <div class="detail-item-label">${header.label}</div>
-            <div class="detail-item-value">${formatCell(record, header.key, true)}</div>
-        `;
-        detailGrid.appendChild(item);
-    });
-    detailContent.appendChild(detailGrid);
-
-    document.getElementById('detail-edit-btn').onclick = () => showEditModal(id);
-    document.getElementById('detail-delete-btn').onclick = () => handleDelete(id);
-
-    listView.classList.remove('active');
-    detailView.classList.add('active');
+    listView.style.display = 'block';
   }
 
   // --- テーブル描画 ---
@@ -337,9 +309,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderTableBody() {
-
-    console.log(`[フロント] renderTableBody が呼ばれました。描画対象の件数: ${filteredRecords.length}件`);
-
     tableBody.innerHTML = '';
     if (filteredRecords.length === 0) {
       const tr = document.createElement('tr');
@@ -357,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tr.style.cursor = 'pointer';
       tr.addEventListener('click', (e) => {
           if (e.target.closest('button, a')) return;
-          showDetailView(record.id);
+          showDetailModal(record.id);
       });
 
       visibleColumns.forEach(key => {
@@ -395,31 +364,33 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'status':
         return `<span class="status-badge status-${value}">${value}</span>`;
       case 'created_at':
-case 'updated_at':
-  if (value instanceof Date && !isNaN(value)) {
-    return value.toLocaleString('ja-JP');
-  }
-  return ''; // 無効な日付やnullの場合は空文字を返す
+      case 'updated_at':
+        if (value instanceof Date && !isNaN(value)) {
+          return value.toLocaleString('ja-JP');
+        }
+        return '';
       case 'url':
       case 'repository':
         return `<a href="${value}" target="_blank" rel="noopener noreferrer" onclick="(e) => e.stopPropagation()">${value}</a>`;
       default:
-        const text = value.toString();
-        return isDetailView ? text.split('\n').join('<br>') : text.split('\n')[0];
+        if (isDetailView) {
+            const sanitizedText = document.createElement('div');
+            sanitizedText.innerText = value.toString();
+            return sanitizedText.innerHTML.replace(/\n/g, '<br>');
+        }
+        return value.toString().split('\n')[0];
     }
   }
 
   // --- フィルタ・ソート・検索 ---
   function applyFiltersAndSort() {
     let tempRecords = [...allRecords];
-    
     const searchTerm = searchInput.value.toLowerCase();
     if (searchTerm) {
-      tempRecords = tempRecords.filter(record => {
-        return Object.values(record).some(val => String(val).toLowerCase().includes(searchTerm));
-      });
+      tempRecords = tempRecords.filter(record => 
+        Object.values(record).some(val => String(val).toLowerCase().includes(searchTerm))
+      );
     }
-
     tempRecords.sort((a, b) => {
       if (currentSort.key === 'status') {
         const indexA = STATUS_SORT_ORDER.indexOf(a.status);
@@ -432,7 +403,6 @@ case 'updated_at':
       if (valA > valB) return currentSort.order === 'asc' ? 1 : -1;
       return 0;
     });
-
     filteredRecords = tempRecords;
     renderTable();
   }
@@ -498,7 +468,6 @@ case 'updated_at':
         if (['overview', 'next_action', 'memo', 'changelog', 'usage_context'].includes(header.key)) {
             group.classList.add('grid-span-2');
         }
-        
         let inputHtml = '';
         const id = `form-${header.key}`;
         if (header.type === 'textarea') {
@@ -524,34 +493,64 @@ case 'updated_at':
   function showEditModal(id) {
     const record = allRecords.find(r => r.id === id);
     if (!record) { showError('編集対象のデータが見つかりません。'); return; }
-    
     modalForm.reset();
     modalTitle.textContent = 'アプリ情報編集';
-    
     Object.keys(record).forEach(key => {
       const input = document.getElementById(`form-${key}`);
       if (input) input.value = record[key] || '';
     });
-
     modal.style.display = 'block';
   }
 
   function closeModal() { modal.style.display = 'none'; }
+  
+  // NEW: Detail Modal Functions
+  function showDetailModal(id) {
+    const record = allRecords.find(r => r.id === id);
+    if (!record) {
+      showError('詳細を表示するデータが見つかりません。');
+      return;
+    }
+    
+    detailModalTitle.textContent = record.name || 'アプリ詳細';
+    
+    const detailGrid = document.createElement('div');
+    detailGrid.className = 'detail-grid';
+    
+    detailGrid.innerHTML = ALL_HEADERS.map(header => {
+      if (record[header.key] || (header.type === 'readonly' && record[header.key])) {
+        return `
+          <div class="detail-item">
+            <div class="detail-item-label">${header.label}</div>
+            <div class="detail-item-value">${formatCell(record, header.key, true)}</div>
+          </div>
+        `;
+      }
+      return '';
+    }).join('');
+    
+    detailModalBody.innerHTML = ''; // Clear previous content
+    detailModalBody.appendChild(detailGrid);
+    
+    detailModal.style.display = 'block';
+  }
+  
+  function closeDetailModal() {
+    detailModal.style.display = 'none';
+  }
+
 
   // --- データ操作 (CUD) ---
   function handleFormSubmit(e) {
     e.preventDefault();
     const recordData = { id: document.getElementById('form-id').value };
-    
     ALL_HEADERS.filter(h => h.type !== 'readonly').forEach(h => {
         const input = document.getElementById(`form-${h.key}`);
         if (input) recordData[h.key] = input.value;
     });
-
     const saveBtn = document.getElementById('save-btn');
     saveBtn.disabled = true;
     saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 保存中...';
-
     const operation = recordData.id ? 'updateRecord' : 'createRecord';
     google.script.run
       .withSuccessHandler(onSaveSuccess)
@@ -564,9 +563,6 @@ case 'updated_at':
     if (response.status === 'success') {
       closeModal();
       fetchRecords();
-      if (detailView.classList.contains('active')) {
-          showDetailView(response.data.id);
-      }
     } else {
       showError(response.message);
     }
@@ -585,13 +581,11 @@ case 'updated_at':
 
   function handleDelete(id) {
     if (!confirm('このアプリを本当に削除しますか？この操作は元に戻せません。')) return;
-    
     showLoading(false);
     google.script.run
       .withSuccessHandler((res) => {
         hideLoading();
         if(res.status === 'success') {
-          showListView();
           fetchRecords();
         } else {
           showError(res.message);
