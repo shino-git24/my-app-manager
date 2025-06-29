@@ -1,250 +1,628 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <base target="_top">
-    <style>
-      body { font-family: sans-serif; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-      th { background-color: #f2f2f2; }
-      #loading { font-weight: bold; color: #555; }
-      th:nth-child(3), td:nth-child(3) {
-        text-align: center;
-      }
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>自作アプリ管理ツール</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --primary-color: #198754; --primary-hover: #157347;
+      --border-color: #dee2e6; --background-color: #f8f9fa;
+      --text-color: #212529; --white: #fff; --danger-color: #dc3545;
+      --danger-hover: #bb2d3b; --info-color: #0dcaf0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0; padding: 15px; background-color: var(--background-color); color: var(--text-color);
+    }
+    h1, h2, h3 { margin-top: 0; }
 
-      .status-badge {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 16px;
-        font-size: 0.9em;
-        font-weight: bold;
-        color: white;
-        white-space: nowrap;
-      }
+    /* --- Layout --- */
+    .view { display: none; }
+    .view.active { display: block; }
 
-      .status-開発中 { background-color: #ffc107; color: #333}
-      .status-よく使う { background-color: #0d6efd; }      
-      .status-時々使う { background-color: #198754; }    
-      .status-あんまり { background-color: purple; }
-      .status-停止 { background-color: #6c757d; }
+    /* --- Controls --- */
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
+    .search-box { flex-grow: 1; display: flex; align-items: center; }
+    .search-box input { width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 5px; font-size: 1em; }
+    .btn {
+      padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 1em;
+      text-decoration: none; color: var(--white); display: inline-flex; align-items: center; gap: 5px;
+    }
+    .btn-main { background-color: var(--primary-color); }
+    .btn-main:hover { background-color: var(--primary-hover); }
+    .btn-danger { background-color: var(--danger-color); }
+    .btn-danger:hover { background-color: var(--danger-hover); }
+    .btn-secondary { background-color: #6c757d; color: white; }
+    .btn-secondary:hover { background-color: #5c636a; }
 
-      .btn-main {
-        background-color: #198754;
-        color: white;
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 1em;
-        margin-bottom: 12px;
-      }
-      .btn-main:hover {
-        background-color: #157347;
-      }
+    /* --- Column Selector --- */
+    .column-selector { position: relative; }
+    .column-selector-dropdown {
+        display: none; position: absolute; top: 100%; right: 0; background: white;
+        border: 1px solid var(--border-color); border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        padding: 10px; z-index: 50; margin-top: 5px;
+    }
+    .column-selector-dropdown label { display: block; margin-bottom: 5px; white-space: nowrap; }
 
-      #add-modal-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0,0,0,0.5);
-        z-index: 10;
-      }
-      #add-modal-content {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background-color: white;
-        padding: 20px 30px;
-        border-radius: 8px;
-        width: 80%;
-        max-width: 500px;
-      }
-      .close-btn {
-        position: absolute;
-        top: 10px;
-        right: 15px;
-        font-size: 24px;
-        cursor: pointer;
-      }
-      #add-form label {
-        display: block;
-        margin-top: 12px;
-        margin-bottom: 4px;
-        font-weight: bold;        
-      }
-      #add-form input,
-      #add-form textarea,
-      #add-form select {
-        width: 100%;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      box-sizing: border-box;
-      }
-      .form-actions {
-        text-align: right;
-        margin-top: 20px;
-      }
-      
-    </style>
-  </head>
-  <body>
-    <h1>自作アプリ管理ツール</h1>
+    /* --- Table --- */
+    .table-container { overflow-x: auto; width: 100%; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid var(--border-color); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background-color: #e9ecef; cursor: pointer; user-select: none; white-space: nowrap; }
+    th .sort-icon { margin-left: 5px; color: #999; }
+    td { white-space: normal; }
+    .truncate {
+        max-width: 250px; white-space: nowrap; overflow: hidden;
+        text-overflow: ellipsis; cursor: pointer;
+    }
+    .status-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 16px;
+      font-size: 0.9em; font-weight: bold; color: white;
+    }
+    .status-開発中 { background-color: #ffc107; color: #333; }
+    .status-よく使う { background-color: #0d6efd; }
+    .status-時々使う { background-color: #198754; }
+    .status-あんまり { background-color: #6f42c1; }
+    .status-停止 { background-color: #6c757d; }
 
-    <button id="show-add-modal-btn" class="btn-main">+　新規追加</button>
+    /* --- Modal --- */
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6); z-index: 100; overflow-y: auto; padding: 20px 0;
+    }
+    .modal-content {
+      background: var(--white); margin: 20px auto; padding: 25px; border-radius: 8px;
+      width: 90%; max-width: 600px; position: relative;
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-header h2 { margin: 0; font-size: 1.5em; }
+    .close-btn { font-size: 28px; font-weight: bold; cursor: pointer; border: none; background: none; }
+    .form-grid { display: grid; grid-template-columns: 1fr; gap: 15px; }
+    @media (min-width: 600px) {
+      .form-grid { grid-template-columns: repeat(2, 1fr); }
+      .grid-span-2 { grid-column: span 2; }
+    }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group label { margin-bottom: 5px; font-weight: bold; }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; padding: 8px; border: 1px solid var(--border-color);
+      border-radius: 4px; box-sizing: border-box; font-size: 1em;
+    }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-actions { text-align: right; margin-top: 25px; padding-top: 15px; border-top: 1px solid var(--border-color); }
+    .form-actions .btn { margin-left: 10px; }
+
+    /* --- Detail View --- */
+    .detail-card { background: var(--white); border: 1px solid var(--border-color); border-radius: 8px; padding: 25px; }
+    .detail-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color); }
+    .detail-title { font-size: 1.8em; margin: 0; }
+    .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+    .detail-item { display: flex; flex-direction: column; }
+    .detail-item-label { font-weight: bold; color: #555; margin-bottom: 5px; }
+    .detail-item-value { word-wrap: break-word; white-space: pre-wrap; }
+    .detail-item-value a { color: var(--primary-color); }
+
+    /* --- Other --- */
+    #loading, #error { padding: 20px; text-align: center; font-size: 1.2em; }
+    #error { color: var(--danger-color); }
+    .actions-cell { text-align: center; white-space: nowrap; }
+    .actions-cell .btn { margin: 0 3px; }
+  </style>
+</head>
+<body>
+
+  <!-- List View -->
+  <div id="list-view" class="view active">
+    <h1><i class="fa-solid fa-list-check"></i> 自作アプリ管理ツール</h1>
+    <div class="controls">
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="キーワード検索...">
+      </div>
+      <div class="column-selector">
+        <button id="column-select-btn" class="btn btn-secondary"><i class="fa-solid fa-table-columns"></i> 表示列</button>
+        <div id="column-selector-dropdown" class="column-selector-dropdown"></div>
+      </div>
+      <button id="add-btn" class="btn btn-main"><i class="fa-solid fa-plus"></i> 新規追加</button>
+    </div>
+    <div class="table-container">
+      <table id="app-table">
+        <thead></thead>
+        <tbody id="app-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Detail View -->
+  <div id="detail-view" class="view">
+    <div class="detail-header">
+        <h2 id="detail-title" class="detail-title"></h2>
+        <div>
+            <button id="detail-back-btn" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> 一覧へ戻る</button>
+            <button id="detail-edit-btn" class="btn btn-main"><i class="fa-solid fa-pencil"></i> 編集</button>
+            <button id="detail-delete-btn" class="btn btn-danger"><i class="fa-solid fa-trash"></i> 削除</button>
+        </div>
+    </div>
+    <div id="detail-content" class="detail-card"></div>
+  </div>
+
+  <div id="loading"><i class="fa-solid fa-spinner fa-spin"></i> データを読み込み中...</div>
+  <div id="error" style="display: none;"></div>
+
+  <!-- Add/Edit Modal -->
+  <div id="modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-title"></h2>
+        <button id="close-modal-btn" class="close-btn">&times;</button>
+      </div>
+      <form id="modal-form">
+        <input type="hidden" id="form-id">
+        <div class="form-grid">
+          <!-- Form fields will be dynamically generated -->
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="save-btn" class="btn btn-main"><i class="fa-solid fa-save"></i> 保存する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // --- 定数・変数定義 ---
+  const ALL_HEADERS = [
+    { key: 'name', label: 'アプリ名', type: 'text', required: true },
+    { key: 'overview', label: '概要', type: 'textarea' },
+    { key: 'status', label: 'ステータス', type: 'select', options: ['開発中', 'よく使う', '時々使う', 'あんまり', '停止'] },
+    { key: 'tags', label: 'タグ (カンマ区切り)', type: 'text' },
+    { key: 'tech_stack', label: '技術スタック (カンマ区切り)', type: 'text' },
+    { key: 'deployment_type', label: 'デプロイ種別', type: 'text' },
+    { key: 'used_apis', label: '使用API', type: 'text' },
+    { key: 'url', label: 'URL', type: 'url' },
+    { key: 'repository', label: 'リポジトリ', type: 'url' },
+    { key: 'local_source_path', label: 'ローカルパス', type: 'text' },
+    { key: 'usage_context', label: '利用状況', type: 'textarea' },
+    { key: 'icon_status', label: 'アイコン有無', type: 'text' },
+    { key: 'next_action', label: '次にやること', type: 'textarea' },
+    { key: 'changelog', label: '変更履歴', type: 'textarea' },
+    { key: 'memo', label: 'メモ', type: 'textarea' },
+    { key: 'created_at', label: '作成日時', type: 'readonly' },
+    { key: 'updated_at', label: '更新日時', type: 'readonly' }
+  ];
+  const STATUS_SORT_ORDER = ['開発中', 'よく使う', '時々使う', 'あんまり', '停止'];
+  const DEFAULT_VISIBLE_COLUMNS = ['name', 'overview', 'status', 'next_action', 'updated_at'];
+
+  let allRecords = [];
+  let filteredRecords = [];
+  let currentSort = { key: 'updated_at', order: 'desc' };
+  let visibleColumns = DEFAULT_VISIBLE_COLUMNS;
+
+  // --- DOM要素取得 ---
+  const listView = document.getElementById('list-view');
+  const detailView = document.getElementById('detail-view');
+  const tableHead = document.querySelector('#app-table thead');
+  const tableBody = document.querySelector('#app-table tbody');
+  const loadingEl = document.getElementById('loading');
+  const errorEl = document.getElementById('error');
+  const searchInput = document.getElementById('search-input');
+  const modal = document.getElementById('modal');
+  const modalForm = document.getElementById('modal-form');
+  const modalTitle = document.getElementById('modal-title');
+  const columnSelectorDropdown = document.getElementById('column-selector-dropdown');
+
+  // --- 初期化 ---
+  init();
+
+  function init() {
+    renderColumnSelector();
+    renderModalForm();
+    setupEventListeners();
+    fetchRecords();
+  }
+
+  // --- イベントリスナー設定 ---
+  function setupEventListeners() {
+    searchInput.addEventListener('input', handleSearch);
+    document.getElementById('add-btn').addEventListener('click', showAddModal);
+    document.getElementById('close-modal-btn').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    modalForm.addEventListener('submit', handleFormSubmit);
+    document.getElementById('column-select-btn').addEventListener('click', toggleColumnSelector);
+    document.getElementById('detail-back-btn').addEventListener('click', showListView);
+  }
+
+  // --- データ取得 ---
+  function fetchRecords() {
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(onFetchSuccess)
+      .withFailureHandler(onFetchFailure)
+      .getRecords();
+  }
+
+  function onFetchSuccess(response) {
+
+    console.log('[フロント] onFetchSuccess が呼ばれました。');
+    console.log('[フロント] サーバーからの応答 status:', response.status);
+    console.log('[フロント] 受け取った生データ(data):', response.data);
+    console.log('[フロント] 受け取ったデータ件数:', response.data ? response.data.length : 0);
+
+    hideLoading(); // ① 「読み込み中」を非表示にする
+
+    if (response.status === 'success') {
+      allRecords = response.data.map(d => ({
+        ...d,
+        created_at: d.created_at ? new Date(d.created_at) : null,
+        updated_at: d.updated_at ? new Date(d.updated_at) : null
+      })); 
+     applyFiltersAndSort();
+    } else {
+      showError(response.message);
+    }
     
-    <table id="app-table">
-      <thead>
-        <tr>
-          <th>アプリ名</th>
-          <th>概要</th>
-          <th>ステータス</th>
-          <th>次にやること</th>
-        </tr>
-      </thead>
-      <tbody id="app-table-body">
-      </tbody>
-    </table>
+    // ② 隠していたリスト表示を元に戻す
+    listView.style.display = 'block'; 
+  }
 
-    <p id="loading">データを読み込み中...</p>
+  function onFetchFailure(error) {
 
-    <script>
-      document.addEventListener('DOMContentLoaded', function(){
-        fetchAndDisplayApps();
+    console.log('[フロント] onFetchFailure が呼ばれました。エラー内容:', error);
 
-      const addModalOverlay = document.getElementById('add-modal-overlay');
-      const showBtn = document.getElementById('show-add-modal-btn');
-      const closeBtn = document.getElementById('close-add-modal-btn');
-      
-      showBtn.addEventListener('click', () =>{
-        addModalOverlay.style.display = 'block';
+    hideLoading();
+    showError(error.message);
+  }
+
+  // --- ビュー切り替え ---
+  function showListView() {
+    detailView.classList.remove('active');
+    listView.classList.add('active');
+  }
+
+  function showDetailView(id) {
+    const record = allRecords.find(r => r.id === id);
+    if (!record) return;
+
+    document.getElementById('detail-title').textContent = record.name;
+    const detailContent = document.getElementById('detail-content');
+    detailContent.innerHTML = '';
+
+    const detailGrid = document.createElement('div');
+    detailGrid.className = 'detail-grid';
+
+    ALL_HEADERS.forEach(header => {
+        if (header.type === 'readonly' && !record[header.key]) return;
+
+        const item = document.createElement('div');
+        item.className = 'detail-item';
+        item.innerHTML = `
+            <div class="detail-item-label">${header.label}</div>
+            <div class="detail-item-value">${formatCell(record, header.key, true)}</div>
+        `;
+        detailGrid.appendChild(item);
+    });
+    detailContent.appendChild(detailGrid);
+
+    document.getElementById('detail-edit-btn').onclick = () => showEditModal(id);
+    document.getElementById('detail-delete-btn').onclick = () => handleDelete(id);
+
+    listView.classList.remove('active');
+    detailView.classList.add('active');
+  }
+
+  // --- テーブル描画 ---
+  function renderTable() {
+    renderTableHeaders();
+    renderTableBody();
+  }
+
+  function renderTableHeaders() {
+    const tr = document.createElement('tr');
+    visibleColumns.forEach(key => {
+      const header = ALL_HEADERS.find(h => h.key === key);
+      if (!header) return;
+      const th = document.createElement('th');
+      th.dataset.key = header.key;
+      th.innerHTML = `${header.label} <span class="sort-icon"></span>`;
+      th.addEventListener('click', () => handleSort(header.key));
+      tr.appendChild(th);
+    });
+    const actionsTh = document.createElement('th');
+    actionsTh.textContent = '操作';
+    tr.appendChild(actionsTh);
+    tableHead.innerHTML = '';
+    tableHead.appendChild(tr);
+    updateSortIcons();
+  }
+
+  function renderTableBody() {
+
+    console.log(`[フロント] renderTableBody が呼ばれました。描画対象の件数: ${filteredRecords.length}件`);
+
+    tableBody.innerHTML = '';
+    if (filteredRecords.length === 0) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = visibleColumns.length + 1;
+      td.textContent = '表示するデータがありません。';
+      td.style.textAlign = 'center';
+      tr.appendChild(td);
+      tableBody.appendChild(tr);
+      return;
+    }
+
+    filteredRecords.forEach(record => {
+      const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', (e) => {
+          if (e.target.closest('button, a')) return;
+          showDetailView(record.id);
       });
 
-      closeBtn.addEventListener('click', () =>{
-        addModalOverlay.style.display = 'none';
-      });
-
-      addModalOverlay.addEventListener('click', (e) => {
-        if (e.target === addModalOverlay) {
-          addModalOverlay.style.display = 'none';
+      visibleColumns.forEach(key => {
+        const header = ALL_HEADERS.find(h => h.key === key);
+        if (!header) return;
+        const td = document.createElement('td');
+        td.dataset.label = header.label;
+        td.innerHTML = formatCell(record, header.key, false);
+        if (['overview', 'next_action', 'url', 'repository'].includes(key)) {
+            td.classList.add('truncate');
+            td.title = record[key] || '';
         }
+        tr.appendChild(td);
       });
-
-      function fetchAndDisplayApps() {
-        document.getElementById('loading').style.display = 'block';
-        google.script.run
-          .withSuccessHandler(displayApps)
-          .withFailureHandler(displayError)
-          .getAppsData();
-      }
-
-      function displayApps(apps) {
-        const tableBody = document.getElementById('app-table-body');
-        const loading = document.getElementById('loading');
-        tableBody.innerHTML = '';
-        loading.style.display = 'none';
-
-        if (!apps || apps.length === 0){
-          tableBody.innerHTML = '<tr><td colspan="4">表示するデータがありません。</td></tr>';
-          return;
-        }
-        apps.forEach(app => {
-          const row = document.createElement('tr');
-          const status = app.status || '';
-          row.innerHTML = `
-            <td>${app.name || ''}</td>
-            <td>${app.overview || ''}</td>
-            <td><span class="status-badge status-${status}">${status}</span></td>
-            <td>${app.next_action || ''}</td>
-            `;
-          tableBody.appendChild(row);
-        });
-      }
-
-      function displayError(error){
-        const loading = document.getElementById('loading');
-        loading.innerHTML = 'エラーが発生しました：'+ error.message;
-        loading.style.color = 'red';
-      }
-
-      const addForm = document.getElementById('add-form');
-
-      // --- フォームの「保存」ボタンが押された時の処理 ---
-      addForm.addEventListener('submit', function(e) {
-        e.preventDefault(); // フォーム送信時のページリロードを防止
-
-        const submitButton = addForm.querySelector('button[type="submit"]');
-        submitButton.disabled = true; // ボタンを無効化して二重押しを防ぐ
-        submitButton.textContent = '保存中...';
-
-        // フォームからデータを取得してオブジェクトにまとめる
-        const appData = {
-          name: document.getElementById('form-name').value,
-          overview: document.getElementById('form-overview').value,
-          status: document.getElementById('form-status').value,
-          next_action: document.getElementById('form-next-action').value,
-        };
-
-        // サーバーサイドの addApp 関数を呼び出す
-        google.script.run
-          .withSuccessHandler(function(response) {
-            // 成功した場合の処理
-            addModalOverlay.style.display = 'none'; // モーダルを閉じる
-            addForm.reset(); // フォームの中身をリセット
-            submitButton.disabled = false; // ボタンを有効に戻す
-            submitButton.textContent = '保存する';
       
-            fetchAndDisplayApps();
-            
-            alert(response.message); // サーバーからの成功メッセージを表示
-          })
-          .withFailureHandler(function(error) {
-            // 失敗した場合の処理
-            alert('エラーが発生しました: ' + error.message);
-            submitButton.disabled = false; // ボタンを有効に戻す
-            submitButton.textContent = '保存する';
-          })
-          .addApp(appData);
-      });
-
+      const actionsTd = document.createElement('td');
+      actionsTd.className = 'actions-cell';
+      actionsTd.innerHTML = `
+        <button class="btn btn-main edit-btn" data-id="${record.id}" title="編集"><i class="fa-solid fa-pencil"></i></button>
+        <button class="btn btn-danger delete-btn" data-id="${record.id}" title="削除"><i class="fa-solid fa-trash"></i></button>
+      `;
+      tr.appendChild(actionsTd);
+      tableBody.appendChild(tr);
     });
 
-    </script>
+    document.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); showEditModal(e.currentTarget.dataset.id); }));
+    document.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); handleDelete(e.currentTarget.dataset.id); }));
+  }
+  
+  function formatCell(record, key, isDetailView) {
+    const value = record[key] || '';
+    if (value === '') return '';
 
-<div id="add-modal-overlay">
-  <div id="add-modal-content">
-    <h2>新規アプリ追加</h2>
-    <span id="close-add-modal-btn" class="close-btn">&times;</span>
-    <form id="add-form">
-      <label for="name">アプリ名：</label>
-      <input type="text" id="form-name" required>
+    switch(key) {
+      case 'status':
+        return `<span class="status-badge status-${value}">${value}</span>`;
+      case 'created_at':
+case 'updated_at':
+  if (value instanceof Date && !isNaN(value)) {
+    return value.toLocaleString('ja-JP');
+  }
+  return ''; // 無効な日付やnullの場合は空文字を返す
+      case 'url':
+      case 'repository':
+        return `<a href="${value}" target="_blank" rel="noopener noreferrer" onclick="(e) => e.stopPropagation()">${value}</a>`;
+      default:
+        const text = value.toString();
+        return isDetailView ? text.split('\n').join('<br>') : text.split('\n')[0];
+    }
+  }
 
-      <label for="overview">概要：</label>
-      <textarea id="form-overview" rows="3"></textarea>
+  // --- フィルタ・ソート・検索 ---
+  function applyFiltersAndSort() {
+    let tempRecords = [...allRecords];
+    
+    const searchTerm = searchInput.value.toLowerCase();
+    if (searchTerm) {
+      tempRecords = tempRecords.filter(record => {
+        return Object.values(record).some(val => String(val).toLowerCase().includes(searchTerm));
+      });
+    }
 
-      <label for="status">ステータス：</label>
-      <select id="form-status">
-        <option value="開発中">開発中</option>
-        <option value="よく使う">よく使う</option>
-        <option value="時々使う">時々使う</option>
-        <option value="あんまり">あんまり</option>
-        <option value="停止">停止</option>
-      </select>
+    tempRecords.sort((a, b) => {
+      if (currentSort.key === 'status') {
+        const indexA = STATUS_SORT_ORDER.indexOf(a.status);
+        const indexB = STATUS_SORT_ORDER.indexOf(b.status);
+        return currentSort.order === 'asc' ? indexA - indexB : indexB - indexA;
+      }
+      const valA = a[currentSort.key];
+      const valB = b[currentSort.key];
+      if (valA < valB) return currentSort.order === 'asc' ? -1 : 1;
+      if (valA > valB) return currentSort.order === 'asc' ? 1 : -1;
+      return 0;
+    });
 
-      <label for="form-next-action">次にやること：</label>
-      <input type="text" id="form-next-action">
+    filteredRecords = tempRecords;
+    renderTable();
+  }
 
-      <div class="form-action">
-        <button type="submit" class="btn-main">保存する</button>
-      </div>
-    </form>
-  </div>
-</div>
+  function handleSearch() { applyFiltersAndSort(); }
 
-  </body>
+  function handleSort(key) {
+    if (currentSort.key === key) {
+      currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+    } else {
+      currentSort.key = key;
+      currentSort.order = 'asc';
+    }
+    applyFiltersAndSort();
+  }
+
+  function updateSortIcons() {
+    document.querySelectorAll('#app-table th').forEach(th => {
+      const icon = th.querySelector('.sort-icon');
+      if (icon) {
+        if (th.dataset.key === currentSort.key) {
+          icon.className = `sort-icon fa-solid fa-sort-${currentSort.order === 'asc' ? 'up' : 'down'}`;
+        } else {
+          icon.className = 'sort-icon fa-solid fa-sort';
+        }
+      }
+    });
+  }
+
+  // --- 列選択 ---
+  function renderColumnSelector() {
+      columnSelectorDropdown.innerHTML = '';
+      ALL_HEADERS.filter(h => h.type !== 'readonly').forEach(header => {
+          const label = document.createElement('label');
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = header.key;
+          checkbox.checked = visibleColumns.includes(header.key);
+          checkbox.addEventListener('change', handleColumnSelectionChange);
+          label.appendChild(checkbox);
+          label.append(` ${header.label}`);
+          columnSelectorDropdown.appendChild(label);
+      });
+  }
+
+  function handleColumnSelectionChange() {
+      visibleColumns = Array.from(columnSelectorDropdown.querySelectorAll('input:checked')).map(cb => cb.value);
+      renderTable();
+  }
+
+  function toggleColumnSelector() {
+      const isVisible = columnSelectorDropdown.style.display === 'block';
+      columnSelectorDropdown.style.display = isVisible ? 'none' : 'block';
+  }
+
+  // --- モーダル処理 ---
+  function renderModalForm() {
+    const formGrid = modalForm.querySelector('.form-grid');
+    formGrid.innerHTML = '';
+    ALL_HEADERS.filter(h => h.type !== 'readonly').forEach(header => {
+        const group = document.createElement('div');
+        group.className = 'form-group';
+        if (['overview', 'next_action', 'memo', 'changelog', 'usage_context'].includes(header.key)) {
+            group.classList.add('grid-span-2');
+        }
+        
+        let inputHtml = '';
+        const id = `form-${header.key}`;
+        if (header.type === 'textarea') {
+            inputHtml = `<textarea id="${id}" rows="3"></textarea>`;
+        } else if (header.type === 'select') {
+            const options = header.options.map(opt => `<option value="${opt}">${opt}</option>`).join('');
+            inputHtml = `<select id="${id}">${options}</select>`;
+        } else {
+            inputHtml = `<input type="${header.type}" id="${id}" ${header.required ? 'required' : ''}>`;
+        }
+        group.innerHTML = `<label for="${id}">${header.label}</label>${inputHtml}`;
+        formGrid.appendChild(group);
+    });
+  }
+
+  function showAddModal() {
+    modalForm.reset();
+    document.getElementById('form-id').value = '';
+    modalTitle.textContent = '新規アプリ追加';
+    modal.style.display = 'block';
+  }
+
+  function showEditModal(id) {
+    const record = allRecords.find(r => r.id === id);
+    if (!record) { showError('編集対象のデータが見つかりません。'); return; }
+    
+    modalForm.reset();
+    modalTitle.textContent = 'アプリ情報編集';
+    
+    Object.keys(record).forEach(key => {
+      const input = document.getElementById(`form-${key}`);
+      if (input) input.value = record[key] || '';
+    });
+
+    modal.style.display = 'block';
+  }
+
+  function closeModal() { modal.style.display = 'none'; }
+
+  // --- データ操作 (CUD) ---
+  function handleFormSubmit(e) {
+    e.preventDefault();
+    const recordData = { id: document.getElementById('form-id').value };
+    
+    ALL_HEADERS.filter(h => h.type !== 'readonly').forEach(h => {
+        const input = document.getElementById(`form-${h.key}`);
+        if (input) recordData[h.key] = input.value;
+    });
+
+    const saveBtn = document.getElementById('save-btn');
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 保存中...';
+
+    const operation = recordData.id ? 'updateRecord' : 'createRecord';
+    google.script.run
+      .withSuccessHandler(onSaveSuccess)
+      .withFailureHandler(onSaveFailure)
+      [operation](recordData);
+  }
+
+  function onSaveSuccess(response) {
+    resetSaveButton();
+    if (response.status === 'success') {
+      closeModal();
+      fetchRecords();
+      if (detailView.classList.contains('active')) {
+          showDetailView(response.data.id);
+      }
+    } else {
+      showError(response.message);
+    }
+  }
+
+  function onSaveFailure(error) {
+    resetSaveButton();
+    showError(error.message);
+  }
+  
+  function resetSaveButton() {
+    const saveBtn = document.getElementById('save-btn');
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<i class="fa-solid fa-save"></i> 保存する';
+  }
+
+  function handleDelete(id) {
+    if (!confirm('このアプリを本当に削除しますか？この操作は元に戻せません。')) return;
+    
+    showLoading(false);
+    google.script.run
+      .withSuccessHandler((res) => {
+        hideLoading();
+        if(res.status === 'success') {
+          showListView();
+          fetchRecords();
+        } else {
+          showError(res.message);
+        }
+      })
+      .withFailureHandler((err) => {
+        hideLoading();
+        showError(err.message);
+      })
+      .deleteRecord(id);
+  }
+
+  // --- UIフィードバック ---
+  function showLoading(isInitialLoad) {
+      if (isInitialLoad) {
+          listView.style.display = 'none';
+      }
+      loadingEl.style.display = 'block';
+      errorEl.style.display = 'none';
+  }
+
+  function hideLoading() {
+      loadingEl.style.display = 'none';
+  }
+
+  function showError(message) {
+    errorEl.textContent = `エラー: ${message}`;
+    errorEl.style.display = 'block';
+    setTimeout(() => { errorEl.style.display = 'none'; }, 5000);
+  }
+});
+</script>
+</body>
 </html>
-
-
