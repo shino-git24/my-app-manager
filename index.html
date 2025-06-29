@@ -5,7 +5,7 @@
     <style>
       body { font-family: sans-serif; }
       table { width: 100%; border-collapse: collapse; }
-      th, td { border: 1px solid #ccc padding: 8px; text-align: left; }
+      th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
       th { background-color: #f2f2f2; }
       #loading { font-weight: bold; color: #555; }
       th:nth-child(3), td:nth-child(3) {
@@ -15,7 +15,7 @@
       .status-badge {
         display: inline-block;
         padding: 4px 12px;
-        bordr-radius: 16px;
+        border-radius: 16px;
         font-size: 0.9em;
         font-weight: bold;
         color: white;
@@ -28,10 +28,73 @@
       .status-あんまり { background-color: purple; }
       .status-停止 { background-color: #6c757d; }
 
+      .btn-main {
+        background-color: #198754;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1em;
+        margin-bottom: 12px;
+      }
+      .btn-main:hover {
+        background-color: #157347;
+      }
+
+      #add-modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+        z-index: 10;
+      }
+      #add-modal-content {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: white;
+        padding: 20px 30px;
+        border-radius: 8px;
+        width: 80%;
+        max-width: 500px;
+      }
+      .close-btn {
+        position: absolute;
+        top: 10px;
+        right: 15px;
+        font-size: 24px;
+        cursor: pointer;
+      }
+      #add-form label {
+        display: block;
+        margin-top: 12px;
+        margin-bottom: 4px;
+        font-weight: bold;        
+      }
+      #add-form input,
+      #add-form textarea,
+      #add-form select {
+        width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+      }
+      .form-actions {
+        text-align: right;
+        margin-top: 20px;
+      }
+      
     </style>
   </head>
   <body>
     <h1>自作アプリ管理ツール</h1>
+
+    <button id="show-add-modal-btn" class="btn-main">+　新規追加</button>
     
     <table id="app-table">
       <thead>
@@ -50,11 +113,33 @@
 
     <script>
       document.addEventListener('DOMContentLoaded', function(){
+        fetchAndDisplayApps();
+
+      const addModalOverlay = document.getElementById('add-modal-overlay');
+      const showBtn = document.getElementById('show-add-modal-btn');
+      const closeBtn = document.getElementById('close-add-modal-btn');
+      
+      showBtn.addEventListener('click', () =>{
+        addModalOverlay.style.display = 'block';
+      });
+
+      closeBtn.addEventListener('click', () =>{
+        addModalOverlay.style.display = 'none';
+      });
+
+      addModalOverlay.addEventListener('click', (e) => {
+        if (e.target === addModalOverlay) {
+          addModalOverlay.style.display = 'none';
+        }
+      });
+
+      function fetchAndDisplayApps() {
+        document.getElementById('loading').style.display = 'block';
         google.script.run
           .withSuccessHandler(displayApps)
           .withFailureHandler(displayError)
-          .getAppsData();  
-      });
+          .getAppsData();
+      }
 
       function displayApps(apps) {
         const tableBody = document.getElementById('app-table-body');
@@ -84,7 +169,81 @@
         loading.innerHTML = 'エラーが発生しました：'+ error.message;
         loading.style.color = 'red';
       }
+
+      const addForm = document.getElementById('add-form');
+
+      // --- フォームの「保存」ボタンが押された時の処理 ---
+      addForm.addEventListener('submit', function(e) {
+        e.preventDefault(); // フォーム送信時のページリロードを防止
+
+        const submitButton = addForm.querySelector('button[type="submit"]');
+        submitButton.disabled = true; // ボタンを無効化して二重押しを防ぐ
+        submitButton.textContent = '保存中...';
+
+        // フォームからデータを取得してオブジェクトにまとめる
+        const appData = {
+          name: document.getElementById('form-name').value,
+          overview: document.getElementById('form-overview').value,
+          status: document.getElementById('form-status').value,
+          next_action: document.getElementById('form-next-action').value,
+        };
+
+        // サーバーサイドの addApp 関数を呼び出す
+        google.script.run
+          .withSuccessHandler(function(response) {
+            // 成功した場合の処理
+            addModalOverlay.style.display = 'none'; // モーダルを閉じる
+            addForm.reset(); // フォームの中身をリセット
+            submitButton.disabled = false; // ボタンを有効に戻す
+            submitButton.textContent = '保存する';
+      
+            fetchAndDisplayApps();
+            
+            alert(response.message); // サーバーからの成功メッセージを表示
+          })
+          .withFailureHandler(function(error) {
+            // 失敗した場合の処理
+            alert('エラーが発生しました: ' + error.message);
+            submitButton.disabled = false; // ボタンを有効に戻す
+            submitButton.textContent = '保存する';
+          })
+          .addApp(appData);
+      });
+
+    });
+
     </script>
+
+<div id="add-modal-overlay">
+  <div id="add-modal-content">
+    <h2>新規アプリ追加</h2>
+    <span id="close-add-modal-btn" class="close-btn">&times;</span>
+    <form id="add-form">
+      <label for="name">アプリ名：</label>
+      <input type="text" id="form-name" required>
+
+      <label for="overview">概要：</label>
+      <textarea id="form-overview" rows="3"></textarea>
+
+      <label for="status">ステータス：</label>
+      <select id="form-status">
+        <option value="開発中">開発中</option>
+        <option value="よく使う">よく使う</option>
+        <option value="時々使う">時々使う</option>
+        <option value="あんまり">あんまり</option>
+        <option value="停止">停止</option>
+      </select>
+
+      <label for="form-next-action">次にやること：</label>
+      <input type="text" id="form-next-action">
+
+      <div class="form-action">
+        <button type="submit" class="btn-main">保存する</button>
+      </div>
+    </form>
+  </div>
+</div>
+
   </body>
 </html>
 
